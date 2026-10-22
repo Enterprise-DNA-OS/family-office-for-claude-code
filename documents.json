@@ -1,11 +1,60 @@
 [
   {
-    "name": "example",
-    "title": "TODO(author): the first document this industry must produce",
-    "for_each": "select gen_random_uuid() as id, 'Example' as name",
+    "name": "family-wealth-report",
+    "title": "Family wealth report",
+    "for_each": "select 'family' as id, coalesce((select value from settings where key = 'family_name'), 'Family') as name",
     "file": "name",
     "sections": [
-      { "title": "Details", "sql": "select 'replace me' as item, $1::text as record_id" }
+      { "title": "Net worth by entity", "note": "Latest valuations, converted to the base currency at the latest recorded rate.", "sql": "select entity, entity_kind, assets, value_base_cents, illiquid_base_cents from net_worth_by_entity where $1::text is not null order by value_base_cents desc nulls last" },
+      { "title": "By asset class", "sql": "select asset_class, count(*) as assets, sum(value_base_cents)::bigint as value_base_cents, round(100.0 * sum(value_base_cents) / nullif((select sum(value_base_cents) from holdings), 0), 1) as percent from holdings where $1::text is not null group by asset_class order by value_base_cents desc nulls last" },
+      { "title": "Liquidity against commitments", "sql": "select cash_base_cents, daily_liquid_base_cents, calls_90_days_base_cents, calls_12_months_base_cents, uncalled_base_cents from liquidity where $1::text is not null" },
+      { "title": "Private fund commitments", "sql": "select fund, entity, currency, committed_cents, called_cents, uncalled_cents, distributed_cents, nav_cents, dpi, tvpi from commitment_status where $1::text is not null order by entity, fund" },
+      { "title": "Five largest assets", "sql": "select asset, entity, value_base_cents, as_of from holdings where $1::text is not null order by value_base_cents desc nulls last limit 5" },
+      { "title": "For the trustees and directors", "note": "Legal checks and house policy items open at the date of this report.", "sql": "select level, what, record, issue, source from attention where $1::text is not null order by level, what" }
+    ]
+  },
+  {
+    "name": "entity-statement",
+    "title": "Entity statement",
+    "for_each": "select id, name from entities where status = 'active' order by name",
+    "file": "name",
+    "sections": [
+      { "title": "Owners", "sql": "select coalesce(m.name, oe.name) as owner, o.percent, o.basis from ownership o left join members m on m.id = o.owner_member_id left join entities oe on oe.id = o.owner_entity_id where o.owned_entity_id = $1 order by o.percent desc" },
+      { "title": "Holdings", "sql": "select asset, asset_class, currency, value_cents, as_of, value_base_cents from holdings where entity_id = $1 order by value_base_cents desc nulls last" },
+      { "title": "Income and fees, last 12 months", "sql": "select kind, currency, count(*) as entries, sum(amount_cents)::bigint as amount_cents from transactions where entity_id = $1 and occurred_on >= current_date - 365 group by kind, currency order by kind" },
+      { "title": "Open dates", "sql": "select title, due_date, rule from deadlines where entity_id = $1 and done_on is null order by due_date" },
+      { "title": "Papers on file", "sql": "select kind, title, dated, location from documents where entity_id = $1 order by kind" }
+    ]
+  },
+  {
+    "name": "div7a-loan-schedule",
+    "title": "Division 7A loan schedule: working paper for your accountant",
+    "for_each": "select id, name from loans where kind = 'div7a' order by name",
+    "file": "name",
+    "sections": [
+      { "title": "Loan", "sql": "select l.name, le.name as lender, coalesce(bm.name, be.name) as borrower, l.currency, l.principal_cents, l.made_on, l.term_years, l.agreement_on from loans l join entities le on le.id = l.lender_entity_id left join members bm on bm.id = l.borrower_member_id left join entities be on be.id = l.borrower_entity_id where l.id = $1" },
+      { "title": "Year by year", "note": "Minimum yearly repayment by the s109E formula on the opening balance at the ATO benchmark rate. Interest is charged on the opening balance for the full year; your accountant's daily-balance working may differ slightly.", "sql": "select year_label as income_year, currency, opening_cents, rate_bps, myr_cents, repaid_cents, shortfall_cents, closing_cents from div7a_schedule where loan_id = $1 order by income_year" },
+      { "title": "Repayments recorded", "sql": "select paid_on, amount_cents, note from loan_repayments where loan_id = $1 order by paid_on" }
+    ]
+  },
+  {
+    "name": "capital-call-approval",
+    "title": "Capital call: approval to pay (draft for signature)",
+    "for_each": "select k.id, a.name || ' ' || k.due_date as name from capital_calls k join commitments c on c.id = k.commitment_id join assets a on a.id = c.asset_id where k.status <> 'paid' order by k.due_date",
+    "file": "name",
+    "sections": [
+      { "title": "The call", "sql": "select fund, entity, currency, amount_cents, notice_date, due_date, status from open_calls where id = $1" },
+      { "title": "The commitment after this call", "sql": "select s.fund, s.currency, s.committed_cents, s.called_cents, (s.uncalled_cents - k.amount_cents) as uncalled_after_cents from capital_calls k join commitment_status s on s.id = k.commitment_id where k.id = $1" },
+      { "title": "Cash held by the paying entity", "note": "Approved by: ____________________  Date: ____________. This is a draft. Nothing is paid from here.", "sql": "select h.asset, h.currency, h.value_cents, h.as_of from capital_calls k join commitments c on c.id = k.commitment_id join holdings h on h.entity_id = c.entity_id where k.id = $1 and h.asset_class in ('cash', 'term-deposit') order by h.value_cents desc" }
+    ]
+  },
+  {
+    "name": "beneficiary-information",
+    "title": "Basic trust information for a beneficiary (Trusts Act 2019, s51)",
+    "for_each": "select b.id, e.name || ' ' || m.name as name from beneficiaries b join entities e on e.id = b.entity_id join members m on m.id = b.member_id where e.kind = 'trust' and e.jurisdiction = 'NZ' order by e.name, m.name",
+    "file": "name",
+    "sections": [
+      { "title": "The trust and you", "note": "Draft letter content. Have the trustees or their lawyer review it before it is given.", "sql": "select m.name as beneficiary, e.name as trust, e.trustees, 'You are a beneficiary of this trust.' as notice, 'You may ask the trustees for trust information. The trustees will consider your request under the Trusts Act 2019.' as your_right from beneficiaries b join entities e on e.id = b.entity_id join members m on m.id = b.member_id where b.id = $1" }
     ]
   }
 ]

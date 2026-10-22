@@ -1,14 +1,18 @@
 [
-  {
-    "name": "week",
-    "title": "This week",
-    "subtitle": "Family Office for Claude Code: what needs attention, rendered by npm run view",
-    "sections": [
-      {
-        "title": "Needs attention",
-        "note": "TODO(author): point this at the industry's attention view (overdue, stuck, quiet).",
-        "sql": "select 'replace me' as item, 'TODO(author)' as why"
-      }
-    ]
-  }
+  { "name": "week", "title": "The family office week", "sections": [
+      { "title": "In five numbers", "sql": "select item, value from this_week" },
+      { "title": "Needs a person", "note": "Legal checks first, then money going out, then house policy.", "sql": "select level, what, record, issue, source from attention order by case level when 'breached' then 0 when 'overdue' then 1 when 'due soon' then 2 when 'stale' then 3 else 4 end, what" }
+  ] },
+  { "name": "net-worth", "title": "Net worth", "sections": [
+      { "title": "By entity", "sql": "select entity, entity_kind, assets, value_base_cents, illiquid_base_cents from net_worth_by_entity order by value_base_cents desc nulls last" },
+      { "title": "Every holding", "sql": "select asset, entity, asset_class, liquidity, currency, value_cents, as_of, value_base_cents from holdings order by value_base_cents desc nulls last" }
+  ] },
+  { "name": "commitments", "title": "Private fund commitments", "sections": [
+      { "title": "Committed, called and returned", "sql": "select fund, entity, currency, committed_cents, called_cents, uncalled_cents, distributed_cents, nav_cents, nav_as_of, dpi, tvpi from commitment_status order by entity, fund" },
+      { "title": "Calls not yet paid", "sql": "select fund, entity, currency, amount_cents, status, due_date, days_left from open_calls order by due_date" },
+      { "title": "Liquidity", "sql": "select * from liquidity" }
+  ] },
+  { "name": "stale", "title": "Valuations past policy", "sections": [
+      { "title": "Refresh these", "note": "The policy lives in the valuation_policy records; change it with /customise.", "sql": "select asset, entity, asset_class, as_of, age_days, max_age_days, value_base_cents from stale_valuations order by value_base_cents desc nulls last" }
+  ] }
 ]

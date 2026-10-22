@@ -1,0 +1,4 @@
+Transaction ID,Entity,Asset,Date,Type,Amount,Currency,Description
+TX-1001,Hartley Family Trust,Jarden managed portfolio,15/09/2026,Dividend,"4,210.00",NZD,Quarterly dividends
+TX-1002,Hartley Family Trust,Jarden managed portfolio,20/09/2026,Management Fee,(1850.00),NZD,Portfolio fee
+TX-1003,Ruru Holdings Ltd,Harbour Credit Fund,30/09/2026,Distribution,"18,750.00",NZD,Quarterly distribution
